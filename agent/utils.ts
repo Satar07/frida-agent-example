@@ -41,7 +41,10 @@ export function is_printable_ascii(s: string | null): boolean {
     return non_printable_count / len < 0.2;
 }
 
-export function log_args(context: CpuContext, target_addr: NativePointer) {
+export function log_args(
+    context: CpuContext,
+    target_addr: NativePointer,
+): string {
     const arch = Process.arch;
     let arg_regs: string[] = [];
 
@@ -51,7 +54,7 @@ export function log_args(context: CpuContext, target_addr: NativePointer) {
         arg_regs = ["x0", "x1", "x2", "x3", "x4", "x5"];
     } else {
         logw("unknown architecture!");
-        return;
+        return "unknown architecture!";
     }
 
     const module = Process.findModuleByAddress(target_addr);
@@ -59,13 +62,14 @@ export function log_args(context: CpuContext, target_addr: NativePointer) {
         ? `${module.name} ! ${target_addr.sub(module.base)}`
         : target_addr.toString();
 
-    logi(`Calling ${target_info} with args:`);
+    let output = `Calling ${target_info} with args:\n`;
 
     for (let i = 0; i < arg_regs.length; i++) {
         const reg_name = arg_regs[i];
         const reg_val = context[reg_name as keyof CpuContext];
-        log(`    ${reg_name}: ${smart_parse(reg_val)}`);
+        output += `    ${reg_name}: ${smart_parse(reg_val)}\n`;
     }
+    return output;
 }
 
 export function smart_parse(p: NativePointer, depth: number = 5): string {

@@ -1,4 +1,4 @@
-import { logi, log, log_args } from "./utils.js";
+import { logi, logw, log_args } from "./utils.js";
 import { CONFIG } from "./config.js";
 
 export function set_trace() {
@@ -7,6 +7,7 @@ export function set_trace() {
     const target_module_map = new ModuleMap((m) => m.name === CONFIG.so_name);
 
     logi("Start set trace");
+    // 仅跟踪call 情况，这个会快很多
     // Stalker.follow(trace_pid, {
     //     events: {
     //         call: true,
@@ -48,23 +49,22 @@ export function set_trace() {
     //         }
     //     },
     // });
-    if (Process.arch !== "arm64") {
-        logi("only arm64 is supported");
-        return;
-    }
+
+    // call 参数全部跟踪
     Stalker.follow(trace_pid, {
         transform: function (
             iterator: StalkerArm64Iterator | StalkerX86Iterator,
         ) {
-            let instruction = iterator.next();
+            let instruction: Arm64Instruction | X86Instruction | null;
 
-            do {
+            while ((instruction = iterator.next()) !== null) {
+                // logw(`dbg ${instruction.address}`);
                 // 只关心来自我们目标模块的代码
-                if (target_module_map.has(instruction!.address)) {
+                if (target_module_map.has(instruction.address)) {
                     // 检查指令是否是调用函数
                     if (
-                        instruction?.mnemonic.startsWith("b") ||
-                        instruction?.mnemonic.startsWith("call")
+                        instruction.mnemonic.startsWith("b") ||
+                        instruction.mnemonic.startsWith("call")
                     ) {
                         // 获取call的目标地址
                         const targetOperand = instruction.operands[0];
@@ -88,17 +88,16 @@ export function set_trace() {
                                         targetOperand.value as keyof CpuContext
                                     ] as NativePointer;
                                 }
-                                log_args(context, target_addr);
+                                logi(log_args(context, target_addr));
                             });
                         }
                     }
                 }
                 iterator.keep(); // 保留原始指令
-                instruction = iterator.next();
-            } while (instruction !== null);
+            }
         },
     });
-    Thread.sleep(1);
+    Thread.sleep(0.1);
 }
 
 export function cleanup_trace(threadId: ThreadId) {
