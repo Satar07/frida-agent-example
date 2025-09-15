@@ -1,34 +1,28 @@
-import Java from "frida-java-bridge";
-import { log } from "./logger.js";
+// import Java from "frida-java-bridge";
+import { hook_addr, logi } from "./utils.js";
+import { set_trace } from "./call-trace.js";
+import { CONFIG } from "./config.js";
 
-const header = Memory.alloc(16);
-header
-    .writeU32(0xdeadbeef).add(4)
-    .writeU32(0xd00ff00d).add(4)
-    .writeU64(uint64("0x1122334455667788"));
-log(hexdump(header.readByteArray(16) as ArrayBuffer, { ansi: true }));
-
-Process.getModuleByName("libSystem.B.dylib")
-    .enumerateExports()
-    .slice(0, 16)
-    .forEach((exp, index) => {
-        log(`export ${index}: ${exp.name}`);
-    });
-
-Interceptor.attach(Module.getGlobalExportByName("open"), {
-    onEnter(args) {
-        const path = args[0].readUtf8String();
-        log(`open() path="${path}"`);
-    }
-});
-
-if (Java.available) {
-    Java.perform(() => {
-        send({
-            type: "status",
-            message: "Application class-loader now available"
+function main() {
+    const main_logic = () => {
+        hook_addr(0x88c, {
+            onEnter: () => {
+                logi("enter main");
+                set_trace();
+            },
         });
+    };
+
+    Process.attachModuleObserver({
+        onAdded: (module) => {
+            logi(`load module ${module.name}`);
+            if (CONFIG.so_name === module.name) {
+                logi(`is time to load! base addr is: ${module.base}`);
+                CONFIG.so_base = module.base;
+                main_logic();
+            }
+        },
     });
-} else {
-    console.log("No Java VM in this process");
 }
+
+main();
